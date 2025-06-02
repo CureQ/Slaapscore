@@ -1,3 +1,8 @@
+# Bestandsnaam: ECG_results.py
+# Naam: Esmee Springer
+# Voor het laatst bewerkt op: 02-06-2025
+
+# Importeren van benodigde pakkages
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,31 +11,32 @@ from scipy.interpolate import interp1d
 import h5py
 from tabulate import tabulate
 import shutil
+import os
 
-# Get all information necessary for results table
+# Functie om alle benodigde informatie op te halen voor de resultatentabel
 def get_participant_info(ecg_file_name):
     try:
-        # Get the participant number
+        # Haal het deelnemernumer uit het pad van het ECG-bestand
         participant_number = ecg_file_name.split("/")[-2]
         participant_number = int(participant_number.split("_")[-1])
         print("Measurement of participant {0}".format(participant_number))
     except:
         print("Participant number could not be extracted.")  
 
-    # Get the full file name
+    # Haal de volledige bestandsnaam op
     file_name = ecg_file_name.split("/")[-1]
 
     try:
-        # Get the start date out of the file name
+        # Haal de startdatum uit de bestandsnaam
         start_date_time = file_name.split("_")[0]
         start_date_time = start_date_time.split("T")
         start_date = start_date_time[0]
 
-        # Get the start time out of the file name
+        # Haal de starttijd uit de bestandsnaam
         start_time = start_date_time[1]
         start_time = start_time.split("Z")[0]
 
-        # Get the start date and time in a nice format
+        # Zet datum en tijd samen in een format als datetime-object
         start_timestamp = datetime.strptime("{0} {1}".format(start_date, start_time), "%Y%m%d %H%M%S")
     except:
         print("Start timestamp could not be extracted.\n")
@@ -38,41 +44,46 @@ def get_participant_info(ecg_file_name):
         print("Expected file name should end like this: xxxxxxxxTxxxxxxZ_xxxxxxxxxxxx_ecg_stream.csv")
         print("Your file name looks like this:", ecg_file_name)
 
-    # Get df
+    # Lees het ECG-bestand in als DataFrame
     df = pd.read_csv(ecg_file_name)
-    # Get timestamps
+
+    # Haal het eerste en laatste tijdstip van de meting op
     first_timestamp = df["timestamp"].iloc[0]
     last_timestamp = df["timestamp"].iloc[-1]
-    # Get duration in milliseconds
+
+    # Bereken de duur van de meting in milliseconden
     duration_milliseconds = last_timestamp - first_timestamp
     print("Measurement took {0} milliseconds.".format(duration_milliseconds))
 
-    # Get the measurement duration in seconds
+    # Bereken de duur van de meting in seconden
     duration_seconds = int(duration_milliseconds / 1000)
-    # Make a single division to produce both the quotient (minutes) and the remainder (seconds)
+    # Verdeel de duur in minuten en seconden
     minutes, seconds = divmod(duration_seconds, 60)
+    # Verdeel de duur in minuten en seconden
     hours, minutes = divmod(minutes, 60)
+
     print("The measurement duration took {0} seconds.".format(duration_seconds))
     print("That amount equals with {} hours, {} minutes, and {} seconds.".format(hours, minutes, seconds))
 
-    # Add measurement duration to start timestamp
+    # Voeg de duur toe aan het starttijdstip om het eindtijdstip te bepalen
     duration_timestamp = timedelta(seconds=duration_seconds)
     end_timestamp = start_timestamp + duration_timestamp
     print("Measurement started on {0}".format(start_timestamp))
     print("Measurement  ended  on {0}".format(end_timestamp))
 
-    # Return all information for results table
+    # Geef alle verzamelde informatie terug voor de resultatentabel
     return participant_number, start_timestamp, end_timestamp
 
 
-# Get all results necessary for results table
+# Functie om alle resultaten op te halen die nodig zijn voor de resultatentabel 
 def get_results(results_file, show_plots=False):
-    # Open HDF5 file
+    # Open HDF5 file met de resultaten
     with h5py.File(results_file, 'r') as results:
-        # Get confusion matrix
+        # Haal de confusion matrix op
         confusions = results["confusions"][()]
         print(confusions)
-    # Get the number of every predicted label
+
+    # Haal het aantal voorspellingen per slaapstadium op
     predicted_label_amount = confusions[0][0]
     predicted_label_amount
     print("0=Wake:\t   ", int(predicted_label_amount[0]))
@@ -80,97 +91,107 @@ def get_results(results_file, show_plots=False):
     print("2=N2/S2:   ", int(predicted_label_amount[2]))
     print("3=N3/S3/S4:", int(predicted_label_amount[3]))
     print("4=REM:\t   ", int(predicted_label_amount[4]))
-    # Open HDF5 file
+
+    # Open het HDF5 bestand opnieuw om voorspellingen op te halen
     with h5py.File(results_file, 'r') as results:
         predictions = results["predictions"][()][0]
 
+    # Als show_plots=True, maak dan een grafiek van de slaapstadia in de tijd
     if show_plots:
         plt.close()
-        # Visialize sleep stages over time
+        # Visualiseer de slaapstadia over de tijd
         plt.plot(predictions)
         plt.title("Sleep stages per 30-second epochs")
         plt.ylabel("Sleep stages")
         plt.xlabel("30-second epochs")
         plt.yticks(np.unique(predictions))
         plt.show()
-    # How many minutes are nessecary to see if someone is really awake
+
+    # Definieer hoeveel minuten nodig zijn om wakker zijn te detecteren
     min_minutes_awake = 5
 
-    # Calculates how many epochs define if someone is awake (*2, because 30-second epochs)
+    # Bereken hoeveel epochs (30 sec) overeenkomen met deze minuten
     min_epochs_awake = min_minutes_awake * 2
+
+    # Variabele voor de wake state (wakker)
     wake_state = 0
+
+    # Teller voor aantal keren wakker geworden 's nachts
     wake_up_amount, wake_state_period = 0, 0
-    # Loop through all predictions
+
+    # Loop door alle voorspellingen heen
     for idx, prediction in enumerate(predictions):
-        # Check if person is in wake state
+        # Controleer of de persoon wakker is
         if prediction == wake_state:
             wake_state_period += 1
         else:
             wake_state_period = 0
 
-        # Check if person is in wake state for exactly 5 minutes
+        # Als persoon precies 5 minuten wakker is geweest, tel het als wakker worden
         if wake_state_period == min_epochs_awake:
             wake_up_amount += 1
-    # Check if wake_state is in begin of sleep
+
+    # Controleer of de persoon aan het begin van de meting al wakker was (corrigeer de teller)
     if np.mean(predictions[:min_epochs_awake]) == wake_state:
         wake_up_amount -= 1
-    # Check if wake_state is in end of sleep
+    # Controleer of de persoon aan het einde van de meting wakker was (corrigeer de teller)
     if np.mean(predictions[-min_epochs_awake:]) == wake_state:
         wake_up_amount -= 1
 
     print(f"Person woke up {wake_up_amount} times at the middle of the night.")
 
-    # Calculate epochs till person is asleep
+    # Bereken hoe lang het duurde voordat de persoon in slaap viel
     awake_epochs, wake_state_period = 0, 0
-    # Loop through all predictions
+    # Loop door alle voorspellingen
     for idx, prediction in enumerate(predictions):
-        # Check if person is in wake state
+        # Controleer of de persoon wakker is
         if prediction == wake_state:
             awake_epochs +=1
         else:
             break
 
-    # Calculate sleep-on-set latency
+    # Bereken de slaaplatentie (=hoelang het duurt voordat de persoon in slaap valt)
     sleep_on_set_latency = int(awake_epochs / 2)
     print(f"Person was awake for {sleep_on_set_latency} minutes before falling asleep.")
 
-    # Calculate epochs from the moment person is awake
+    # Bereken het aantal epochs dat de persoon wakker was aan het einde van de meting
     awake_epochs = 0
-    # Loop through all predictions backwards
+    # Loop door alle voorspellingen voor wakker zijn aan het einde van de nacht, maar dan backwards
     for idx, prediction in enumerate(np.flip(predictions)):
-        # Check if person is in wake state
+        # Controleer of de persoon wakker is
         if prediction == wake_state:
             awake_epochs +=1
         else:
             break
 
-    # Calculate wake-up-set latency
+    # Bereken de wakker-latentie, hoelang de persoon wakker was voordat de meting stopte
     wake_up_set_latency = int(awake_epochs / 2)
     print(f"Person was awake for {wake_up_set_latency} minutes before ending the measurement.")
 
-    # Table with some results
+    # Maak een tabel met de belangrijkste resultaten
     table = [[sleep_on_set_latency, wake_up_set_latency, wake_up_amount]]
     headers = ["Minutes awake before sleep", "Minutes awake before measurement end", "Times woken up"]
     print(tabulate(table, headers, tablefmt="pretty"))
 
-    # Return all calculations for visualisation in table
+    # Geef alle berekende waarden terug voor verdere verwerking of visualisatie
     return predicted_label_amount, sleep_on_set_latency, wake_up_set_latency, wake_up_amount
 
 
-# Get all results in a table
+# Haal alle resultaten op en zet ze in een overzichtelijke tabel
 def get_results_table(ecg_file_name, results_file_name, preprocessed_file, file_counter):
-    # Get participant info
+    # Verkrijg deelnemerinformatie zoals nummer, starttijd en eindtijd
     participant_number, start_timestamp, end_timestamp = get_participant_info(ecg_file_name)    
 
-    # Get all calculations
+    # Haal de berekende resultaten op uit het resultatenbestand
     predicted_label_amount, sleep_on_set_latency, wake_up_set_latency, wake_up_amount = get_results(results_file_name)
 
     print("Deelnemer nummer:", participant_number)
 
-    # Time person fell asleep and woke up
+    # Bepaal tijdstip van inslapen en wakker worden
     asleep_timestamp = start_timestamp + timedelta(minutes=sleep_on_set_latency)
     awake_timestamp = end_timestamp - timedelta(minutes=wake_up_set_latency)
 
+    # Maak een overzichtstabel met meetgegevens
     headers = ["Datum van meting", str(start_timestamp.date())]
     table = [["Tijd meting begonnen", start_timestamp.time()],
              ["Tijd in slaap gevallen", asleep_timestamp.time()],
@@ -192,54 +213,54 @@ def get_results_table(ecg_file_name, results_file_name, preprocessed_file, file_
              ["Totaal aantal uren gemeten", int((sum(predicted_label_amount))/2)/60],
              ["Totaal aantal uren geslapen", ((int(predicted_label_amount[1])/2)+(int(predicted_label_amount[2])/2)+(int(predicted_label_amount[3])/2)+(int(predicted_label_amount[4])/2))/60],
             ]
+    # toon overzichtstabel in de console
     print(tabulate(table, headers, tablefmt="grid"))
-
-    import os
-    # Folder for ECG data
+    
+    # Pad waar de ECG-data staat
     results_ecg_data_base_folder = os.path.dirname(ecg_file_name)
-    #toegevoegd----------------------------------------
-    # Bepaal de bovenliggende map van de huidige participant-map (bijv. 'MoveSense_data_participant_12')
+    
+    # Bepaal de bovenliggende map van de deelnemer
     parent_folder = os.path.dirname(results_ecg_data_base_folder)
 
     # Maak een algemene map aan voor alle resultaten
     all_results_folder = os.path.join(parent_folder, "MoveSense_data_resultaten")
     if not os.path.exists(all_results_folder):
         os.makedirs(all_results_folder)
-    # tot hier toegevoegd zojuist---------------------------------
-
+    
+    # Maak een map specifiek voor deze deelnemer
     results_ecg_data_folder = "results_ecg_data_participant_{0}".format(participant_number)
     results_ecg_data_folder = "{0}/{1}".format(results_ecg_data_base_folder, results_ecg_data_folder)
 
-    # Create folder for results data if not exists
+    # Maak map aan als deze nog niet bestaat
     if not os.path.exists(results_ecg_data_folder):
         os.makedirs(results_ecg_data_folder)
 
-    # Write all data to Excel sheet
+    # Zet de tabel om in een DataFrame
     excel_results = pd.DataFrame(table)
     excel_filename = "Results_participant_{0}.xlsx".format(participant_number)
 
-    # Create unique and easy to understand filename for ECG data
+    # Bepaal het volledige pad naar het Excelbestand binnen de deelnemersmap
     results_ecg_data_file_name = "{0}/{1}".format(results_ecg_data_folder, excel_filename)
     print(results_ecg_data_file_name)
 
-    # Check if excel file exists
+    # Als het Excelbestand al bestaat, voeg dan een nieuw tabblad toe (Wanneer een tabblad dezelfde naam heeft, wordt deze overschreven)
     if os.path.exists(results_ecg_data_file_name):
-        writer = pd.ExcelWriter(results_ecg_data_file_name, engine='openpyxl', mode="a", if_sheet_exists="replace") # Write an excel data sheet without loosing original data
+        writer = pd.ExcelWriter(results_ecg_data_file_name, engine='openpyxl', mode="a", if_sheet_exists="replace") 
     else:
-        writer = pd.ExcelWriter(results_ecg_data_file_name, engine='openpyxl') # Create excel file with the first data sheet
+        writer = pd.ExcelWriter(results_ecg_data_file_name, engine='openpyxl') 
 
-    # Create sheet name with the day
+    # Geef het werkblad een naam gebasseerd op gevolgde nummer van het bestand
     sheet_name = "Results_day_{0}".format(file_counter)
     print(sheet_name)
 
+    # Schrijf de resultaten naar het Excelbestand
     excel_results.to_excel(excel_writer=writer, index=False, header=headers, sheet_name=sheet_name) # Add excel sheet
     writer.close()
-    #toegevoegd------------------------------------------------
-    # Bestemmingspad in de centrale resultatenmap
+    
+    # Kopieer het resultaat ook naar de centrale resultatenmap
     central_results_path = os.path.join(all_results_folder, excel_filename)
-
-    # Kopieer het bestand
     shutil.copy(results_ecg_data_file_name, central_results_path)
     print(f"Resultaat gekopieerd naar centrale map: {central_results_path}")
-    # tot hier toegevoegd---------------------------------------------
+    
+    # Print het volledige DataFrame 
     print(excel_results)

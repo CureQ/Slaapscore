@@ -1,8 +1,12 @@
+# Bestandsnaam: analyse_ECG_files_beide.py
+# Naam: Esmee Springer
+# Voor het laatst bewerkt op: 02-06-2025
+
 '''
 Adjustable variables
 '''
 
-# Folder with all ecg files - Each folder is of 1 participant
+# Definieer het pad naar een map met MoveSense bestanden
 ecg_folders = [
     "C:/Users/esmee/OneDrive/Documenten/Hva jaar 4/Afstudeerstage/data/Esmee/MoveSense_data/MoveSense_participant_35/",
     # "C:/Users/jesse/Documents/HvA/1001 Hete Nachten/MoveSense_data/MoveSense_participant_*/",
@@ -36,7 +40,7 @@ age = [
 ''' 
 Analyse all ECG files 
 '''
-
+# Importeer de benodigde pakkages
 import pandas as pd
 import os
 import subprocess
@@ -46,19 +50,21 @@ from Prepare_ECG_files import get_hdf5_file
 from ECG_results import get_results_table
 
 
-# Functie om het preprocessing en machine learning model uit te voeren
+# Functie om de preprocessing en het machine learning model uit te voeren
 def process_ecg_file(ecg_file_name, file_counter, results_file_name, is_android=False):
     # Preprocessing
+    # Controleer of het een Android bestand is
     if is_android:
         preprocessed_file, preprocessed_df = get_hdf5_file_android(ecg_file_name, file_counter)
     else:
+        # Voer anders de functie voor Apple bestanden uit
         preprocessed_file = get_hdf5_file(ecg_file_name, file_counter)
 
-    # Run Machine Learning model
+    # Start het Machine Learning model via train.py
     train_script = os.path.join(os.getcwd(), "train.py")
     subprocess.run(["python", train_script, preprocessed_file], check=True)
 
-    # Analyseer de resultaten
+    # Analyseer het modelresultaat en schrijf de output naar een resultatenbestand
     if is_android:
         get_results_table_android(ecg_file_name, results_file_name, preprocessed_file, file_counter, preprocessed_df)
     else:
@@ -66,15 +72,20 @@ def process_ecg_file(ecg_file_name, file_counter, results_file_name, is_android=
 
 # Loop door alle ECG-mappen
 for ecg_folder in ecg_folders:
-    # Zoek alle ECG-bestanden in de map
+    # Zoek alle ECG-bestanden in de map en submappen
     ecg_files = []
     for root, dirs, files in os.walk(ecg_folder):
+
+        # Print de huidige map die wordt doorzocht
         print(f"Processing folder: {root}")
+
+        # Voeg bestanden toe aan de lijst als ze eindigen op '.csv' en 'ecg' in de bestandsnaam bevatten
         for file in files:
             if file.endswith(".csv") and "ecg" in file.lower():
                 ecg_files.append(file)
 
     # Start het verwerken van de bestanden
+    # Start teller om bij te houden hoeveel bestanden zijn verwerkt
     file_counter = 1
     preprocessed_files, result_files = [], []
 
@@ -100,98 +111,6 @@ for ecg_folder in ecg_folders:
         file_counter += 1
 
     print(f"Verwerkte {file_counter - 1} bestanden in map: {ecg_folder}")
-
-# FOUTE CODE HIERONDER
-
-# # Loop through all folders with ecg files
-# for ecg_folder in ecg_folders:
-#     # Get all ECG files
-#     ecg_files = []
-#     # Generate directory tree of ECG folder
-#     for root, dirs, files in os.walk(ecg_folder):
-#         print(files)
-#         # Loop through all files in ECG folder
-#         for file in files:
-#             # Search only for all ecg .CSV files
-#             if "ecg" in file and file.endswith(".csv"): #Apple
-#                 ecg_files.append(file)
-
-#                 file_counter = 1
-#                 preprocessed_files, result_files = [], []
-#                 # Preprocess all ECG files
-#                 for ecg_file in ecg_files:
-#                     ecg_file_name = ecg_folder + ecg_file
-
-#                     # Analyse ecg file name
-#                     preprocessed_file = get_hdf5_file(ecg_file_name, file_counter)
-#                     preprocessed_files.append(preprocessed_file)
-#                     print(preprocessed_files)
-
-
-#                     ''' Run Machine Learning model '''
-#                     # Ensure you are are in the right directionary by writing this code line in the Python environment terminal 
-#                     '''
-#                     > cd .\ecg-sleep-staging\your_own_data\primary_model
-#                     '''
-
-#                     # Path to train script
-#                     train_script = os.getcwd() + "/train.py"
-
-#                     # Run model in Python environment terminal with subprocess
-#                     subprocess.run(["python", train_script, preprocessed_file], check=True)
-
-
-#                     ''' Compute results '''
-#                     # Get result files
-#                     results_file_name = os.getcwd() + "/results.h5"
-#                     result_files.append(results_file_name)
-
-#                     # Analyse HDF5 files
-#                     get_results_table(ecg_file_name, results_file_name, preprocessed_file, file_counter)
-
-#                     print(result_files)
-#                     file_counter += 1
-                    
-#             if "ECG" in file and file.endswith(".csv"): # Android
-#                 ecg_files.append(file)
-
-#                 file_counter = 1
-#                 preprocessed_files, result_files = [], []
-#                 # Preprocess all ECG files
-#                 for ecg_file in ecg_files:
-#                     ecg_file_name = ecg_folder + ecg_file
-
-#                     # Analyse ecg file name
-#                     preprocessed_file, preprocessed_df = get_hdf5_file_android(ecg_file_name, file_counter)
-#                     preprocessed_files.append(preprocessed_file)
-#                     print(preprocessed_files)
-
-
-#                     ''' Run Machine Learning model '''
-#                     # Ensure you are are in the right directionary by writing this code line in the Python environment terminal 
-#                     '''
-#                     > cd .\ecg-sleep-staging\your_own_data\primary_model
-#                     '''
-
-#                     # Path to train script
-#                     train_script = os.getcwd() + "/train.py"
-
-#                     # Run model in Python environment terminal with subprocess
-#                     subprocess.run(["python", train_script, preprocessed_file], check=True)
-
-
-#                     ''' Compute results '''
-#                     # Get result files
-#                     results_file_name = os.getcwd() + "/results.h5"
-#                     result_files.append(results_file_name)
-
-#                     # Analyse HDF5 files
-#                     get_results_table_android(ecg_file_name, results_file_name, preprocessed_file, file_counter, preprocessed_df)
-
-#                     print(result_files)
-#                     file_counter += 1
-
-
-            
+       
 
 
