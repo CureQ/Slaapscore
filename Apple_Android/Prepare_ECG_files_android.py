@@ -333,7 +333,7 @@ def get_hdf5_file_android(ecg_file, file_counter, show_plots=False):
     print("Original timestamps: ", original_timestamps[:5], "...", original_timestamps[-5:])
     print("Resampled timestamps:", resampled_timestamps[:5], "...", resampled_timestamps[-5:])
 
-    # Maak een niwue DataFrame aan met de resamplede timsestamps en ECG-waarden
+    # Maak een nieuw DataFrame aan met de resamplede timsestamps en ECG-waarden
     resampled_df = pd.DataFrame({
         'timestamp': resampled_timestamps,
         'sample': resampled_ecg
@@ -685,7 +685,7 @@ def get_hdf5_file_android(ecg_file, file_counter, show_plots=False):
     headers = ["Gender", "Age"]
     print(tabulate(table, headers, tablefmt="pretty"))
 
-    # #### Midnight offset
+    # #### Midnight offset berekenen
 
     # Deze functie berekent het tijdsverschil tussen het begin van de opname en middernacht
     def get_midnight_offset(start_date_time):
@@ -762,5 +762,5 @@ def get_hdf5_file_android(ecg_file, file_counter, show_plots=False):
         print(demographics_data[()])
         print(midnight_offset_data[()])
 
-    # geef de bestandsnaam en het oorspronkelijke DataFrame terug
+    # Geef de bestandsnaam en het oorspronkelijke DataFrame terug
     return preprocessed_ecg_data_file_name, df
