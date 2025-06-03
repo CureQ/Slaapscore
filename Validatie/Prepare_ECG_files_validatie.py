@@ -1,7 +1,11 @@
+# Bestandsnaam: Prepare_ECG_files_validatie.py
+# Naam: Esmee Springer
+# Voor het laatst bewerkt op: 03-06-2025
+
+# Importeren van benodigde pakkages
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-# from datetime import datetime, timedelta, time
 import datetime
 from datetime import timedelta, time
 from scipy.interpolate import interp1d
@@ -20,24 +24,23 @@ import h5py
 def get_hdf5_file_validatie(edf_file, show_plots=False):
     # # Cardiosomnography data preprocessing
     # 
-    # The ECG data needs to be preprocessed, before the ECG data can be given as input for the neural network.
+    # De preprocessing van de ECG data is nodig om de data geschikt te maken als input voor het neurale netwerk
     # 
-    # ### Read the raw MoveSense ECG data
 
     # Open het bestand
     f = pyedflib.EdfReader(edf_file)
 
-    # Haal signaalinformatie op
+    # Haal het aantal signalen, de signaallabels en de samplefrequenties op
     n_signals = f.signals_in_file
     signal_labels = f.getSignalLabels()
     sampling_rates = f.getSampleFrequencies()
 
-    # Maak een lege lijst om de data in te verzamelen
+    # Maak een lege lijst om de eerste 10 waarden van elk signaal in op te slaan
     data = []
 
     # Loop door elk signaal en sla de eerste 10 waarden op
     for i in range(n_signals):
-        signal_data = f.readSignal(i)  # Lees signaal
+        signal_data = f.readSignal(i)  # Lees het volledige signaal
         data.append([signal_labels[i], sampling_rates[i]] + list(signal_data[:10]))
 
     # Sluit het EDF-bestand
@@ -47,10 +50,10 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     columns = ["Signaalnaam", "Samplefrequentie"] + [f"Punt {i+1}" for i in range(10)]
     df = pd.DataFrame(data, columns=columns)
 
-    # Print het DataFrame
+    # Print het DataFrame met de verzamelde signaalinformatie
     print(df)
 
-    # Open het EDF-bestand
+    # Open het EDF-bestand om specifieke ECG-gegevens te verwerken
     f = pyedflib.EdfReader(edf_file)
 
     # Haal alle signaallabels en samplefrequenties op
@@ -77,11 +80,11 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     f.close()
 
 
-    # ### Visualize ECG values of raw data
+    # ### Visualiseer ruwe data
 
     if show_plots:
         plt.close()
-        # Plot the ECG values of a whole night
+        # Plot het volledige ECG-signaal van de nacht
         plt.plot(df_ecg["timestamp"], df_ecg["sample"])
         plt.title("Raw data ECG measurement")
         plt.xlabel("Timestamps")
@@ -93,24 +96,26 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     # 
     # ---
     # 
-    # ### First, get all provided information about the measurement
-    # Haal bestandsnaam eruit
-
+    # ### Verzamelen van metadata (belangrijke gegevens) over de metingen
+    
+    # Haal de bestandsnaam uit het pad
     filename = os.path.basename(edf_file)  # 'shhs1-200001.edf'
 
     # Verwijder extensie en splits op '-'
     name_without_ext = os.path.splitext(filename)[0]  # 'shhs1-200001'
     dataset, participant_id = name_without_ext.split('-')
 
+    # Print de datasetnaam en het participant ID
     print("Dataset:", dataset)           # 'shhs1'
     print("Participant ID:", participant_id)  # '200001'
 
     # Haal de ECG-waarden uit je dataframe en zet ze om naar een numpy array
     raw_ecg_samples = df_ecg["sample"].to_numpy()  
 
-    # Haal de startdatum en starttijd op
-    start_timestamp = f.getStartdatetime()  # Dit geeft een datetime object
-    # Verkrijg de startdatum en starttijd apart
+    # Haal de startdatum en starttijd op (datetime-object)
+    start_timestamp = f.getStartdatetime()  
+
+    # Verkrijg de startdatum en starttijd 
     start_date = start_timestamp.date()  # Haalt alleen de datum op
     start_time = start_timestamp.time()  # Haalt alleen de tijd op
 
@@ -119,19 +124,22 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     print(f"Measurement start time: {start_time}")
     print(f"Start date and start time: {start_timestamp}")
 
-    # Get timestamps
+    # Haal de eerste en laatste timestamp uit het ECG DataFrame
     first_timestamp = df_ecg["timestamp"].iloc[0]
     last_timestamp = df_ecg["timestamp"].iloc[-1]
-    # Get duration in milliseconds
-    duration_milliseconds = (last_timestamp - first_timestamp)*1000 # tijd staat in seconde, om naar milliseconde te gaan *1000
+
+    # Bereken de duur in milliseconden (tijd is in seconden, dus vermenigvuldig met 1000)
+    duration_milliseconds = (last_timestamp - first_timestamp)*1000 
     print("Measurement took {0} milliseconds.".format(duration_milliseconds))
 
-    # Get the measurement duration in seconds
+    # Bereken de duur in seconden
     duration_seconds = int(duration_milliseconds / 1000)
-    # Make a single division to produce both the quotient (minutes) and the remainder (seconds)
+
+    # Bereken het aantal uren, minuten en seconden
     minutes, seconds = divmod(duration_seconds, 60)
     hours, minutes = divmod(minutes, 60)
 
+    # print de meetduur
     print("The measurement duration took {0} seconds.".format(duration_seconds))
     print("That amount equals with {} hours, {} minutes, and {} seconds.".format(hours, minutes, seconds))
 
@@ -145,114 +153,128 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
 
     # Bereken de samplefrequentie (Hertz)
     hertz = round(1 / measurement_interval)
+
     # Print de resultaten
     print("Gemiddeld tijdsinterval tussen elke meting is: ")
     print(" - {0:.3f} seconden.".format(measurement_interval))
     print(" - {0:.3f} milliseconden.".format(measurement_interval * 1000))
     print("\nSamplefrequentie: {0} Hertz.".format(hertz))
 
-# Add extra column with timestamps
+# Voeg extra kolom met timestamps toe aan de ECG data
     def add_timestamps(df_ecg, start_timestamp, end_timestamp):
-        # Start timestamp and end timestamp
+        # Print de starttijd en eindtijd van de meting
         print("Starting timestamp: ", start_timestamp)
         print("Ending timestamp:", end_timestamp, "\n\n")
         
-        # Calculate the total amount of minutes between start- and end time
+        # Bereken het totaal aantal minuten tussen begin- en eindtijd
         total_minutes = (end_timestamp - start_timestamp).total_seconds() / 60
-        # Calculate the total amount of measurement per minute
+
+        # Bereken hoeveel metingen er per minuut zijn gedaan
         measurements_per_minute = len(df_ecg) / total_minutes
         
-        # Create a list of timestamps
+        # Genereer voor elke rij in het ECG-DataFrame een timestamp
         df_ecg["Timestamp"] = [start_timestamp + timedelta(minutes=i/measurements_per_minute) for i in range(len(df_ecg))]
+        # Geef het DataFrame terug
         return df_ecg
     
-    # Add timestamps for each measurement
+    # Voeg timestamps toe aan elk meetpunt
     df_ecg = add_timestamps(df_ecg, start_timestamp, end_timestamp)
     df_ecg
 
-    # Visualize ecg data at any time
+    # Visualiseer ECG data 
+    # Functie om ECG-data te plotten
     def plot_data(df_ecg, ecg_samples=np.array([]), title="Raw data ECG measurement", y_range=[0,0], x_range=[0,0]):
+        # Sluit eerder geopende plots
         plt.close()
-        # Plot the ECG values of a whole night
+
+        # Als er een aparte lijst met ECG-samples wordt meegegeven, gebruik die om te plotten
         if ecg_samples.any():
             ecg_samples = pd.Series(ecg_samples)
             plt.plot(df_ecg["Timestamp"], ecg_samples)
         else:
-            #print(df["Timestamp"])
-            # print(df.columns)
-            # print(df)
+            # Zo niet, gebruik de ECG-kolom uit het DataFrame
             plt.plot(df_ecg["Timestamp"], df_ecg["sample"])
 
-        # Plot y range
+        # Stel y-as in
         if y_range != [0,0]:
             plt.ylim(y_range[0], y_range[1])
-        # Plot x range
+        # Stel x-as in
         if x_range != [0,0]:
             plt.xlim(x_range[0], x_range[1])
 
-
+        # Stel de grafiektitel en labels in
         plt.title(title)
         plt.xlabel("Timestamps")
         plt.xticks(rotation=30)
         plt.ylabel("ECG values")
         plt.show()
 
+    # Als show_plots=True, toon de plot
     if show_plots:
         plot_data(df_ecg)
 
         # <br><br>
-        # 
-        # ---
-        # 
-        # ## Filter noise
-        # 
-        # ### High pass filter
-        # 
-        # Filter High-pass at 0.5 Hertz to remove baseline wander.
+    # 
+    # ---
+    # 
+    # ## Filter ruis
+    # 
+    # ### High pass filter
+    # 
+    # Pas een high-pass filter toe om baseline wander te verwijderen
 
-    # Signal processing functions for filtering the data
+    # Importeer signaalverwerkingsfunctie voor het filteren van de data
     from scipy.signal import butter, filtfilt, iirnotch, resample
 
-    # High-pass filter to remove baseline wander
-    # High-pass filter to remove baseline wander
-    def highpass_filter(data, cutoff=0.5, fs=hertz, order=4): # cutoff stond op 0,5)
+    # Functie om een high-pass filter toe te passen
+    def highpass_filter(data, cutoff=0.5, fs=hertz, order=4):
+        # Bepaal de Nyquist-frequentie, helft van de samplefrequentie
         nyquist = 0.5 * fs
+        # Normaliseer de cutoff frequentie
         normal_cutoff = cutoff / nyquist
         b, a = butter(order, normal_cutoff, btype='high', analog=False)
+        # Pas het filter toe
         filtered_data = filtfilt(b, a, data)
         return filtered_data
     
-    # Apply highpass filter to raw ecg samples
+    # Pas het high-pass filter toe op de ruwe ECG-samples
     highpass_filtered_ecg = highpass_filter(raw_ecg_samples)
     highpass_filtered_ecg
 
-    # ### Remove line noise
+    # ### Verwijder lijnruis
     # 
-    # Line noise (50/60 Hertz) and any other constant-frequency noise should be removed with notch filters.
+    # Lijnruis (50/60 Hertz) en andere frequentieruis worden verwijderd met het notch-filter.
 
-    # Notch filter to remove power line noise (e.g., 50/60 Hz)
+    # Notch-filter functei om netspanningsruis te verwijderen (bijv., 50/60 Hz)
     def notch_filter(data, freq=50, fs=hertz, quality_factor=30):
+        # Bereken Nyquist-frequentie
         nyquist = 0.5 * fs
+        # Normaliseer de frequentie ten opzichte van Nyquist-frequentie
         freq = freq / nyquist
         b, a = iirnotch(freq, quality_factor)
         filtered_data = filtfilt(b, a, data)
         return filtered_data
     
-    # Apply notch filter for both 50 Hz and (if needed) 60 Hz
-    filtered_ecg = notch_filter(highpass_filtered_ecg, freq=50, fs=hertz)  # Apply 50 Hz notch filter
+    # Pas het 50 Hz notch filter toe om netspanningsruis te verwijderen
+    filtered_ecg = notch_filter(highpass_filtered_ecg, freq=50, fs=hertz)  # 50 Hz filter
     filtered_ecg
 
-    filtered_ecg = notch_filter(filtered_ecg, freq=60, fs=hertz)  # Apply 60 Hz notch filter (if applicable)
+    # Pas indien nodig ook het 60 Hz filter toe
+    filtered_ecg = notch_filter(filtered_ecg, freq=60, fs=hertz)  # 60 Hz filter
     filtered_ecg
 
     df_ecg["Timestamp"][0]
 
+    # Definieer een specifiek tijdsinterval voor visualisatie
     x_range = [df_ecg["Timestamp"][998000], df_ecg["Timestamp"][1000000]]
     y_range = [-1, 1]
+
+    # Visualiseer de gefilterde ECG data in het gekozen tijdsinterval
     if show_plots:
         plot_data(df_ecg, y_range=y_range, x_range=x_range)
 
     title = "Filtered ECG data on noise"
+    # Visualiseer de volledig gefilterde ECG data
     if show_plots:
         plot_data(df_ecg, filtered_ecg, title)
 
@@ -260,46 +282,53 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     # 
     # ---
     # 
-    # ## Sample data at 256 Hertz
+    # ## Resample de data naar 256 Hertz
     # 
-    # Sample the data from the originally measured 125 Hertz to the new 256 Hertz.
+    # Resample de data van de oorspronkelijke gemeten 125 Hz naar 256 Hz
     # 
-    # This resampling takes place, because the neural network is trained on ECG datasets of 256 Hertz.
+    # Dit is nodig omdat het neurale netwerk getraind is met ECG-datasets op 256 Hz
     # 
     # #### Sample ECG data
 
-    new_hertz = 256 # New amount of Hertz
-    # Resample the ECG data from 191 Hz to 256 Hz
+    new_hertz = 256 # Nieuwe samplefrequentie in Hertz
+    # Resample het ECG-signaal naar 256 Hz
     resampled_ecg = resample(filtered_ecg, int(len(filtered_ecg) * (new_hertz / hertz)))
     resampled_ecg
 
-    #resample time axis
-    original_timestamps = df_ecg["timestamp"].to_numpy() # Original timestamps numpy array
+    # #### Resample tijdas
+
+    # Haal de originele timestamps op in seconden
+    original_timestamps = df_ecg["timestamp"].to_numpy() 
     original_timestamps
 
-    # Lineaire interpolation for timestamps
-    time_original = np.arange(len(original_timestamps)) / hertz  # Original timesteps in seconds
-    time_resampled = np.linspace(0, time_original[-1], len(resampled_ecg))  # New timesteps in seconds
+    # Bereken originele tijdstappen in seconden
+    time_original = np.arange(len(original_timestamps)) / hertz  
+    time_resampled = np.linspace(0, time_original[-1], len(resampled_ecg))  
 
+    # Toon originele en nieuwe tijdstippen
     print("Original timesteps: ", time_original[:5], "...", time_original[-5:])
     print("Resampled timesteps:", time_resampled[:5], "...", time_resampled[-5:])
 
-    # Interpolate original timestamps to new time-axis
+    # Interpoleer originele tijdstempels naar nieuwe tijdas
     resampled_timestamps = np.interp(time_resampled, time_original, original_timestamps)
 
+    # Toon eerste en laate tijdstempels
     print("Original timestamps: ", original_timestamps[:5], "...", original_timestamps[-5:])
     print("Resampled timestamps:", resampled_timestamps[:5], "...", resampled_timestamps[-5:])
 
+    # Maak een nieuw DataFrame aan met de resamplde data
     resampled_df = pd.DataFrame({
         'timestamp': resampled_timestamps,
         'sample': resampled_ecg
     })
 
-    # Add timestamps for each measurement
+    # Voeg extra timestamp-kolom toe voor betere visualisatie
     resampled_df = add_timestamps(resampled_df, start_timestamp, end_timestamp)
     resampled_df
 
+    # Titel voor visualisatie
     title = f"Resampled ECG data from {hertz} Hz to {new_hertz} Hz"
+    # Plot de resamplde ECG-gegevens als show_plots=True
     if show_plots:
         plot_data(resampled_df, title=title)
 
@@ -313,37 +342,42 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     # 
     # The median of all data should be subtracted. The median of all ECG data should be equal to 0.
 
-    # Calculate the median of the resampled ECG data
+    # Bereken de mediaan van de resamplde ECG-data
     median_ecg = np.median(resampled_ecg)
     median_ecg
 
-    # Subtract the median to center the data around 0
+    # Haal de mediaan ervan af om de data rond 0 te centreren
     centered_ecg = resampled_ecg - median_ecg
 
+    # Controleer of de mediaan (bijna) nul is
     np.abs(np.median(centered_ecg))
 
+    # Vervang de originele waarden in het DataFrame door de gecentreerde ECG-waarden
     resampled_df["sample"] = centered_ecg
     resampled_df
 
+    # Plot de gecentreerde ECG-data als show_plots=True
     title = "Median of ECG data is now equal to 0"
     if show_plots:
         plot_data(resampled_df, centered_ecg, title, y_range=y_range, x_range=x_range)
 
     # ---
     # 
-    # ## Spikes & HeartRate
+    # ## Spikes & Hartslag
     # 
-    # ### Calculate threshold of heartbeat spikes
+    # ### Bepaal de thresholdwaarde voor hartslagpieken
 
+    # Bepaal de thresholdwaarde voor het detecteren van pieken met behulp van de standaardafwijking
     spike_threshold = np.std(resampled_df["sample"])
     spike_threshold
 
+    # Visualiseer de ECG-waarden met de thresholdlijn
     if show_plots:
         plt.close()
-        # Plot ECG values with threshold line
+        # Plot ECG waarden met thresholdlijn
         plt.plot(df_ecg["Timestamp"][998000:1000000], df_ecg["sample"][998000:1000000])
         plt.ylim([-1, 1])
-        # Plot threshold line
+        # Plot thresholdlijn
         plt.axhline(spike_threshold, color="r")
         plt.title("Spike threshold = {:.2f}".format(spike_threshold))
         plt.xlabel("Timestamps")
@@ -354,6 +388,7 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     # Gebruik find_peaks om pieken te detecteren
     peaks, properties = find_peaks(df_ecg["sample"], height=spike_threshold, distance=fs*0.6)
 
+    # Visualiseer de gedetecteerde pieken
     if show_plots:
         # Plot ECG met gedetecteerde pieken
         plt.figure(figsize=(10, 5))
@@ -372,7 +407,7 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
         plt.legend()
         plt.show()
 
-    # Toon aantal pieken
+    # Print het aantal gedetecteerde pieken
     print(f"Aantal gedetecteerde pieken: {len(peaks)}")
 
     # Haal de tijdstempels van de gedetecteerde pieken
@@ -380,9 +415,6 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
 
     # Bereken de tijdsverschillen tussen de pieken (RR-intervals) in seconden
     time_differences = peak_timestamps.diff().dt.total_seconds()
-
-    # Verwijder de eerste NaN waarde (er is geen verschil voor de eerste piek)
-    #time_differences = time_differences[1:]
 
     # Bekijk de eerste paar tijdsverschillen
     print(time_differences.head(20))
@@ -423,15 +455,15 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
 
     if show_plots:
         plt.close()
-        # Plot ECG values with threshold line
+        # Plot een deel van het ECG-signaal met de thresholdlijn en gedetecteerde pieken
         plt.plot(resampled_df["Timestamp"][resampled_x_range[0]:resampled_x_range[1]], resampled_df["sample"][resampled_x_range[0]:resampled_x_range[1]])
-        #plt.plot(df["Timestamp"][998000:1000000], df["sample"][998000:1000000])
+        # Stel y-as limieten in
         plt.ylim([-2000, 2000])
-        # Plot threshold line
+        # Plot de thresholdlijn
         plt.axhline(spike_threshold, color="r")
-        # Plot all spikes
+        # Plot alle spikes
         plt.scatter(spike_value_df["Timestamp"][spikes_x_range[0]:spikes_x_range[1]], spike_value_df["sample"][spikes_x_range[0]:spikes_x_range[1]], c="r", s=10)
-        # Customize lay-out
+        # Lay-out
         plt.title("Spike threshold = {:.2f}".format(spike_threshold))
         plt.xlabel("Timestamps")
         plt.xticks(rotation=30)
@@ -439,34 +471,17 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
         plt.show()
 
         plt.close()
-        # Plot ECG values with threshold line
+        # Plot het volledig resamplede ECG-signaal met alle gedetecteerde pieken
         plt.plot(resampled_df["Timestamp"], resampled_df["sample"])
-        # Plot threshold line
-        # plt.axhline(spike_threshold, color="r")
-        # Plot all spikes
+        
         plt.scatter(spike_value_df["Timestamp"], spike_value_df["sample"], c="r", s=10)
-        # Customize lay-out
-        # plt.title("ECG measurement \nfrom {0} \n  till {1}\nSpike threshold = {2:.0f}".format(start_timestamp, end_timestamp, spike_threshold))
+        
         plt.xlabel("Timestamps")
         plt.xticks(rotation=45)
         plt.ylabel("ECG values")
         plt.show()
 
-        # ### Calculate InterBeat Interval
-
-    # # Calculate time differences between all spikes (again, but only between real spikes now)
-    # spike_value_df["time_differences"] = spike_value_df['Timestamp'].diff().dt.total_seconds() * 1000  # Difference in milliseconds
-    # spike_value_df["time_differences"][:10]
-
-    # # Fill first value of time difference with 1000 instead of NaN, because there is no previous value (This detects the first spike)
-    # first_index = spike_value_df.index[0]
-    # spike_value_df.loc[first_index, "time_differences"] = 1000
-    # spike_value_df[:5]
-
-    # # ### Calculate heart rate
-
-    # spike_value_df["heartrate"] = 60 / spike_value_df["time_differences"] * 1000
-    # spike_value_df
+        # ### Bereken InterBeat Interval (tijd tussen hartslagen)
 
     if show_plots:
         plt.close()
@@ -484,27 +499,27 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     # 
     # ### Scale ECG to range [-0.5, 0.5]
     # 
-    # First measure the minimum and maximum values of every heartbeat. (So not of all ECG data, but just of the heartbeats).<br>
-    # The data should be scaled, such that the 90th percentile (or greater) of the minimum and maximum heartbeat values lies within the range [-0.5, 0.5].
+    # Meet eerst de minimale en maximale waarden van elke hartslag (dus niet van alle ECG-data, alleen de hartslagen).<br>
+    # De data moet zo geschaald worden dat het 90e percentiel (of hoger) van de minimale en maximale hasrtalgwaarden binnen het beriek [-0.5, 0.5] valt.
     # 
-    # Movement artifacts and other noise may exceed the amplitude of most heartbeats. <br>
-    # Noisy data values may lie within the range of [-1.0, -0.5] and [0.5, 1.0]. 
+    # Beweging en andere ruis kunnen de amplitude van de meeste hartslagen overschrijden. <br>
+    # Ruis kan binnen het bereik van [-1.0, -0.5] en [0.5, 1.0] vallen. 
 
-    # Only get all heartbeat values (spikes)
+    # Haal alleen alle hartslagwaarden op (pieken)
     spike_values = spike_value_df["sample"]
     spike_values
 
-    # Calculate the 90th percentile of min/max heartbeat values
+    # Bereken het 90e percentiel van de minimale en maximale hartslagwaarden
     min_value = np.percentile(spike_values, 10)
     max_value = np.percentile(spike_values, 90)
     print("The 90th percentile of the minimum heartbeat values:", min_value)
     print("The 90th percentile of the maximum heartbeat values:", max_value)
 
-    # Scale factor based on the biggest, most absolut value
+    # Bepaal de schaalfactor op basis van de grootste absolute waarde
     scale_factor = 0.5 / max(abs(min_value), abs(max_value))
     print("Scale factor:", scale_factor)
 
-    # Scale using the 90th percentile of min/max heartbeat values, without an adjustment
+    # Schaal de ECG-waarden met de schaalfactor, zonder correctie
     scaled_ecg = centered_ecg * scale_factor
     resampled_df["sample"] = scaled_ecg
     resampled_df
@@ -521,10 +536,10 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
 
     # ### Clamp outliers
     # 
-    # All noisy datapoints and even the "tall" heartbeats should lie between the range of [-1.0, 1.0].<br>
-    # Outliers should all be clamped to [-1.0, 1.0].
+    # Alle datapunten met ruis en zelfs de 'hoge' hartslagen moeten binnen het bereik [-1.0, 1.0] vallen.<br>
+    # Uitschieter moeten allemaal worden begrensd [-1.0, 1.0].
 
-    # Clamp values to [-1.0, 1.0] to handle noise and tall heartbeats
+    # Begrens waarden tot [-1.0, 1.0] om ruis en hoge hartslagen te verwerken
     clamped_ecg = np.clip(scaled_ecg, -1.0, 1.0)
     clamped_ecg
 
@@ -542,22 +557,22 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     # 
     # ---
     # 
-    # ## Reshape into 30-second epochs
+    # ## Reshape naar 30-seconde epochs
     # 
-    # In the last preprocessing step, the ECG values should be divided into 30-second epochs. <br>
-    # These 30-second epochs should be added to a new dataset as individual rows. <br>
-    # The shape of the dataset will be [epoch_count * 7680]. The 7680 columns originate from 30 seconds * 256 Hertz. 
+    # In de laatste preprocessing stap moeten de ECG-waarden worden opgedeeld in 30 seconde epochs <br>
+    # Deze 30 seconde epochs worden toegevoegd aan een nieuwe dataset als afzonderlijke rijen <br>
+    # De vorm van de dataset wordt dan [epoch_count * 7680]. De 7680 kolommen ontstaan uit 30 seconds * 256 Hertz. 
 
-    # Calculate the new 2D array shape
-    epoch_length = 30 * new_hertz # 30 seconds * 256 Hertz = 7680 datapoints per epoch
+    # Bereken de nieuwe vorm van de 2D-array
+    epoch_length = 30 * new_hertz # 30 seconde * 256 Hertz = 7680 datapunten per epoch
     epoch_count = len(clamped_ecg) // epoch_length
     print("Dataset shape: ({}, {})".format(epoch_count, epoch_length))
 
-    # Trim ECG data down to the next nearest 30 second epoch length
-    trimmed_ecg = clamped_ecg[:epoch_count * epoch_length] # ECG length is now a multiple of 30 seconds
+    # Knip ECG-data af naar het dichtsbijzijnde 30 seconde epoch
+    trimmed_ecg = clamped_ecg[:epoch_count * epoch_length] 
     print("Amount of measurements taken into account:", len(trimmed_ecg))
 
-    # Reshape the ECG data into 2D array
+    # Vorm de ECG-data om naar een 2D array
     ecgs = clamped_ecg[:epoch_count * epoch_length].reshape((epoch_count, epoch_length))
     pd.DataFrame(ecgs)
 
@@ -593,16 +608,18 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     #     - 0 (no weight) to 1 (full weight)
     #     - All "unscored" epochs should be given a weight of 0.
 
-    # Check if 'ecgs' is in correct format
+    # Controleer of 'ecgs' het juiste formaat heeft
     print("ECG size should be: \t(epoch_count x 7680)")
     print(f"ECG size is: \t\t{ecgs.shape}")
 
     print("\nECG type should be a: \t2D numpy array of floats")
     print(f"ECG types are: \t\t{type(ecgs)} \n\t\t\t{type(ecgs[1][1])}")
 
-    # Calculate demographics
+    # #### Demografische gegevens
+
+    # Bereken demografische gegevens
     def get_demographics(gender, age):
-        # Convert gender in binary number
+        # Zet geslacht om naar een binair getal
         if gender.lower() == "Male" or "M" or "Man":
             sex = 1
         elif gender.lower() == "Female" or "F" or "Woman":
@@ -610,18 +627,18 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
         else:
             return "Gender is not entered correctly. Please insert Male or Female"
         
-        # Convert age in Floating number
+        # Zet leeftijd om naar een float (komma getal)
         age = age/100
         
-        # Return calculated demographics
+        # Geef berekende demografische gegevens terug
         return np.array([sex, age])
     
-    # Get demographics
+    # Haal demografische gegevens op
     gender = "Male"
     age = 40
     demographics = get_demographics(gender, age)
 
-    # Check if 'demographics' is in correct format
+    # Controleer of 'demographics' het juiste formaat heeft
     print("Demographics size should be: \t(2 x 1)")
     print(f"Demographics size is: \t\t{demographics.shape}")
 
@@ -639,9 +656,9 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     headers = ["Gender", "Age"]
     print(tabulate(table, headers, tablefmt="pretty"))
 
-    # #### Midnight offset
+    # #### Midnight offset berekenen
 
-    # Bereken de offset ten opzichte van middernacht
+    # Functie om midnight-offset te berekenen
     def get_midnight_offset(start_timestamp):
         # Verkrijg de tijd van de start in het gewenste formaat (HH:MM:SS)
         start_time = start_timestamp.strftime("%H:%M:%S")
@@ -656,7 +673,7 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
         offset = ((seconds / 60 + minutes) / 60 + hours) / 24
 
         # Vergelijk de starttijd met 12:00:00 (omgezet naar een datetime.time object)
-        if start_timestamp.time() > time(12, 0, 0):  # Gebruik datetime.time(12, 0, 0) om de tijd te vergelijken
+        if start_timestamp.time() > time(12, 0, 0):  
             offset = -1 + offset
 
         return np.array([offset])
@@ -666,22 +683,22 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     midnight_offset = get_midnight_offset(start_timestamp)  # Bereken de offset
     print("Middernacht offset:", midnight_offset)
 
+    # Huidige datum en tijd ophalen
     datetime.datetime.now()
 
-    # Get midnight offset
-    # start_date_time = datetime.datetime(2024, 11, 19, 12, 0, 1) # test
+    # Verkrijg midnight offset
+
     start_date_time = datetime.datetime.now()
+    # Bereken de midnight offset op basis van de starttijd van de opname
     midnight_offset = get_midnight_offset(start_timestamp)
 
-    # Check if 'midnight_offset' is in correct format
+    # Controleer of 'midnight_offset' het juiste formaat heeft
     print("Midnight offset should contain a float between the range [-1, 1] representing the clocktime offset of when the recording began.")
     print("Midnight offset value:", midnight_offset[0])
 
     # ## Create HDF5 file
-    # import h5py
-    # import os
-
-    # Folder for ECG data
+    
+    # Folder voor ECG data
     # Haal bestandsnaam uit het pad
     filename = os.path.basename(edf_file)  # bijvoorbeeld 'shhs1-200001.edf'
     name_without_ext = os.path.splitext(filename)[0]  # 'shhs1-200001'
@@ -707,96 +724,32 @@ def get_hdf5_file_validatie(edf_file, show_plots=False):
     print(f"Resultaat wordt opgeslagen in: {result_file_path}")
 
     # ## Read HDF5 file
-    # Create or overwrite HDF5 file
+    # Maak het HDF5 bestand aan of overschrijf wanneer deze al bestaat
     with h5py.File(result_file_path, 'w') as hdf5_file:
+        # Voeg de ECG data toe aan het bestand
         ecgs_data = hdf5_file.create_dataset("ecgs", data=ecgs)
+        # Voeg demografische data toe aan het bestand
         demographics_data = hdf5_file.create_dataset("demographics", data=demographics)
+        # Voeg midnight offset toe aan het bestand
         midnight_offset_data = hdf5_file.create_dataset("midnight_offset", data=midnight_offset)
 
-    # Open HDF5 file
+    # ## Read HDF5 file
+
+    # Open HDF5 bestand in read modus
     with h5py.File(result_file_path, 'r') as hdf5_file:
+        # Lees de ECG-data uit het bestand
         ecgs_data = hdf5_file["ecgs"]
+        # Lees de demografische data uit het bestand
         demographics_data = hdf5_file["demographics"]
+        # Lees de midnight offset uit het bestand
         midnight_offset_data = hdf5_file["midnight_offset"]
+        # Print de inhoud
         print(ecgs_data[()])
         print(demographics_data[()])
         print(midnight_offset_data[()])
 
         print(hdf5_file)
 
-    
+    # Geef result_file_path en df_ecg terug
     return result_file_path, df_ecg
 
-    # Folder for ECG data VANAF HIER NIEUW
-    # Folder for ECG data
-    # results_base_path = r"C:/shhs/Results_validatie"
-    # os.makedirs(results_base_path, exist_ok=True)
-
-    # # Maak submapnaam aan
-    # result_folder_name = f"Results_{dataset}_{participant_id}"
-    # full_result_path = os.path.join(results_base_path, result_folder_name)
-
-    # # Verwijder de bestaande map als die er is, en maak hem opnieuw aan
-    # if os.path.exists(full_result_path):
-    #     print(f"Verwijder bestaande map: {full_result_path}")
-    #     # Verwijder alle bestanden en submappen in de map
-    #     for filename in os.listdir(full_result_path):
-    #         file_path = os.path.join(full_result_path, filename)
-    #         try:
-    #             if os.path.isfile(file_path):
-    #                 os.remove(file_path)  # Verwijder bestand
-    #             elif os.path.isdir(file_path):
-    #                 shutil.rmtree(file_path)  # Verwijder submap
-    #         except Exception as e:
-    #             print(f"Kon bestand {file_path} niet verwijderen: {e}")
-    # else:
-    #     print(f"Maak nieuwe map aan: {full_result_path}")
-
-    # os.makedirs(full_result_path, exist_ok=True)
-
-    # # Controleer of de map echt bestaat
-    # if not os.path.isdir(full_result_path):
-    #     print(f"Fout: de map {full_result_path} is niet aangemaakt of niet toegankelijk.")
-    # else:
-    #     print(f"Map bestaat: {full_result_path}")
-
-    # # Stel de bestandsnaam samen
-    # result_filename = f"preprocessed_ecg_data_{dataset}_{participant_id}.h5"
-    # result_file_path = os.path.join(full_result_path, result_filename)
-    # print("result_file_path:", result_file_path)
-
-    # # Print pad als check
-    # print(f"Resultaat wordt opgeslagen in: {result_file_path}")
-
-    # # Create or overwrite HDF5 file
-    # try:
-    #     with h5py.File(result_file_path, 'w') as hdf5_file:
-    #         ecgs_data = hdf5_file.create_dataset("ecgs", data=ecgs)
-    #         demographics_data = hdf5_file.create_dataset("demographics", data=demographics)
-    #         midnight_offset_data = hdf5_file.create_dataset("midnight_offset", data=midnight_offset)
-
-    #     print(f"Bestand succesvol opgeslagen op: {result_file_path}")
-    # except Exception as e:
-    #     print(f"Fout bij opslaan van HDF5 bestand: {e}")
-    #     result_file_path = None
-
-    # # Open HDF5 file en lees de data
-    # if result_file_path is not None:
-    #     try:
-    #         with h5py.File(result_file_path, 'r') as hdf5_file:
-    #             ecgs_data = hdf5_file["ecgs"]
-    #             demographics_data = hdf5_file["demographics"]
-    #             midnight_offset_data = hdf5_file["midnight_offset"]
-    #             print("ECG Data:", ecgs_data[()])
-    #             print("Demographics Data:", demographics_data[()])
-    #             print("Midnight Offset Data:", midnight_offset_data[()])
-    #             print(hdf5_file)
-    #     except Exception as e:
-    #         print(f"Fout bij openen van HDF5 bestand: {e}")
-    # else:
-    #     print("HDF5 bestand is niet aangemaakt, geen gegevens om te lezen.")
-
-    # # Return het pad van het bestand en andere gegevens als nodig
-    # return result_file_path, df_ecg
-
-    
